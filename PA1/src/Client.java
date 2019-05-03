@@ -3,6 +3,8 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.*;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.Scanner;
 
 public class Client {
@@ -25,18 +27,21 @@ public class Client {
     private BufferedWriter clientBufferedWriter;
     private Scanner scanner;
 
+    private Queue<String> sendUDPQueue;
+
     Client() throws IOException {
         clientUDPSocket = new DatagramSocket();
         proxyAddress = InetAddress.getByName(Proxy.PROXY_ADDRESS);
+        sendUDPQueue = new LinkedList<>();
 
-        clientUDPBuffer = new byte[4096];
+        clientUDPBuffer = new byte[4194304];
 
         scanner = new Scanner(System.in);
 
         clientSendUDPThread = new Thread(() -> {
             try {
                 this.sendHttpGET_UDP();
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         });
@@ -50,16 +55,22 @@ public class Client {
         });
     }
 
-    private void sendHttpGET_UDP() throws IOException {
+    private void sendHttpGET_UDP() throws IOException, InterruptedException {
         //TODO Change this condition!
         while (true) {
-            System.out.println("Enter host name to send HTTP UDP packet to proxy: ");
-            String s = scanner.next();
-            if (s.equals("END")) {
-                close();
-                break;
+            if (!sendUDPQueue.isEmpty()) {
+                String s = sendUDPQueue.poll();
+                this.destinationURL = new URL(s);
             }
-            this.destinationURL = new URL(s);
+            else {
+                System.out.println("Enter host name to send HTTP UDP packet to proxy: ");
+                String s = scanner.next();
+                if (s.equals("END")) {
+                    close();
+                    break;
+                }
+                this.destinationURL = new URL(s);
+            }
 
             String httpReq = "GET " + destinationURL.getPath() + " HTTP/1.1\n";
             httpReq += "Host: " + destinationURL.getHost() + "\n";
@@ -70,6 +81,7 @@ public class Client {
             clientUDPBuffer = httpReq.getBytes();
             DatagramPacket clientUDPPacket = new DatagramPacket(clientUDPBuffer, clientUDPBuffer.length, proxyAddress, Proxy.UDP_PORT_NUMBER);
             clientUDPSocket.send(clientUDPPacket);
+            Thread.sleep(2000);
         }
     }
 
@@ -85,11 +97,29 @@ public class Client {
             System.out.println("UDP Packet received from proxy.");
             //System.out.println(received);
 
-            int responseBodyBegin = received.indexOf("\n\n") + 2;
+            String statusCode = received.substring(9, 12);
 
-            clientBufferedWriter = new BufferedWriter(new FileWriter(HTMLFilesFolder + this.destinationURL.getHost() + HTMLExtension));
-            clientBufferedWriter.write(received.substring(responseBodyBegin));
-            clientBufferedWriter.flush();
+            switch (statusCode) {
+                case "301":
+                case "302":
+                    System.out.println("Redirecting...");
+                    int indx1 = received.indexOf("Location: ") + 10;
+                    int indx2 = received.indexOf("\n", indx1);
+                    String newLocation = received.substring(indx1, indx2);
+
+                    sendUDPQueue.add(newLocation);
+                    break;
+                case "404":
+                    System.out.println("404 Not Found. Try again!");
+                    break;
+                case "200":
+                    int responseBodyBegin = received.indexOf("\n\n") + 2;
+
+                    clientBufferedWriter = new BufferedWriter(new FileWriter(HTMLFilesFolder + this.destinationURL.getHost() + HTMLExtension));
+                    clientBufferedWriter.write(received.substring(responseBodyBegin));
+                    clientBufferedWriter.flush();
+                    break;
+            }
         }
     }
 

@@ -27,7 +27,7 @@ public class Proxy {
     public Proxy() throws SocketException {
         proxyUDPSocket = new DatagramSocket(UDP_PORT_NUMBER);
 
-        proxyUDPBuffer = new byte[4096];
+        proxyUDPBuffer = new byte[4194304];
 
         sendTCPQueue = new LinkedList<>();
         sendUDPQueue = new LinkedList<>();
@@ -79,7 +79,7 @@ public class Proxy {
 
             //DEBUGGING PURPOSE
             System.out.println("UDP Packet received from client.");
-            System.out.println(received);
+            //System.out.println(received);
 
             sendTCPQueue.add(received);
         }
@@ -130,6 +130,7 @@ public class Proxy {
                 continue;
             }
 
+            //System.out.println(stringBuilder.toString());
             sendUDPQueue.add(stringBuilder.toString());
         }
     }
@@ -142,6 +143,7 @@ public class Proxy {
             }
 
             String data = sendUDPQueue.poll();
+            System.out.println(data);
 
             if (data == null) {
                 Thread.sleep(200);
