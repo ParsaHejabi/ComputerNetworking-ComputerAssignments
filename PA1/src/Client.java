@@ -82,12 +82,13 @@ public class Client {
             String received = new String(clientUDPPacket.getData(), 0, clientUDPPacket.getLength());
 
             //DEBUGGING PURPOSE
-            System.out.println(received);
+            System.out.println("UDP Packet received from proxy.");
+            //System.out.println(received);
 
-            int htmlBegin = received.indexOf("\n\n") + 2;
+            int responseBodyBegin = received.indexOf("\n\n") + 2;
 
             clientBufferedWriter = new BufferedWriter(new FileWriter(HTMLFilesFolder + this.destinationURL.getHost() + HTMLExtension));
-            clientBufferedWriter.write(received.substring(htmlBegin));
+            clientBufferedWriter.write(received.substring(responseBodyBegin));
             clientBufferedWriter.flush();
         }
     }

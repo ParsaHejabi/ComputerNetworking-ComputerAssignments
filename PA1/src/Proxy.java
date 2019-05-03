@@ -1,87 +1,168 @@
 import java.io.*;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.Socket;
+import java.net.*;
+import java.util.LinkedList;
+import java.util.Queue;
 
-public class Proxy extends Thread {
+public class Proxy {
+
     static final String PROXY_ADDRESS = "localhost";
     static final int UDP_PORT_NUMBER = 161;
-    public static final int TCP_PORT_NUMBER = 80;
+    private static final int TCP_PORT_NUMBER = 80;
 
-    private DatagramSocket socket;
-    private boolean running;
-    private byte[] buf = new byte[4096];
-    private String end = "end";
+    private Socket proxyTCPSocket;
+    private DatagramSocket proxyUDPSocket;
+    private InetAddress clientAddress;
+    private int clientPort = -1;
 
-    public void run() {
-        try {
-            socket = new DatagramSocket(UDP_PORT_NUMBER);
-            running = true;
+    private byte[] proxyUDPBuffer;
 
-            while (running) {
-                buf = new byte[4096];
-                DatagramPacket packet = new DatagramPacket(buf, buf.length);
-                //Receiving packet from client (UDP)
-                socket.receive(packet);
-                InetAddress address = packet.getAddress();
-                int port = packet.getPort();
+    private Thread proxySendUDPThread;
+    private Thread proxyReceiveUDPThread;
+    private Thread proxySendTCPThread;
+    private Thread proxyReceiveTCPThread;
 
-                String received = new String(packet.getData(), 0, packet.getLength());
-                //System.out.println("Proxy received: " + received);
+    private Queue<String> sendTCPQueue;
+    private Queue<String> sendUDPQueue;
 
-                if (received.substring(0, 3).equals(end)) {
-                    running = false;
-                    continue;
-                }
+    public Proxy() throws SocketException {
+        proxyUDPSocket = new DatagramSocket(UDP_PORT_NUMBER);
 
-                String urlHost;
-                int hostBegin = received.indexOf("Host: ") + 6;
-                int hostEnd = received.indexOf("Accept: text/html") - 1;
-                urlHost = received.substring(hostBegin, hostEnd);
+        proxyUDPBuffer = new byte[4096];
 
-                String httpRes = getHtml_TCP(urlHost, received);
-                packet = new DatagramPacket(httpRes.getBytes(), httpRes.length(), address, port);
-                socket.send(packet);
+        sendTCPQueue = new LinkedList<>();
+        sendUDPQueue = new LinkedList<>();
 
+        proxyReceiveUDPThread = new Thread(() -> {
+            try {
+                receiveHttpGET_UDP();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-            socket.close();
-        } catch (IOException ie) {
-            ie.printStackTrace();
-        }
+        });
 
+        proxySendTCPThread = new Thread(() -> {
+            try {
+                sendHttpGET_TCP();
+            } catch (InterruptedException | IOException e) {
+                e.printStackTrace();
+            }
+        });
+
+        proxyReceiveTCPThread = new Thread(() -> {
+            try {
+                receiveHttpGET_TCP();
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+
+        proxySendUDPThread = new Thread(() -> {
+            try {
+                sendHttpGET_UDP();
+            } catch (InterruptedException | IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
-    private static String getHtml_TCP(String urlHost, String httpReq) throws IOException {
-        Socket socket = new Socket(urlHost, TCP_PORT_NUMBER);
+    private void receiveHttpGET_UDP() throws IOException {
+        //TODO Change this condition!
+        while (true) {
+            //Receiving packet from client (UDP)
+            DatagramPacket proxyUDPPacket = new DatagramPacket(proxyUDPBuffer, proxyUDPBuffer.length);
+            proxyUDPSocket.receive(proxyUDPPacket);
 
-        OutputStream outputStream = socket.getOutputStream();
-        PrintWriter writer = new PrintWriter(outputStream);
+            clientAddress = proxyUDPPacket.getAddress();
+            clientPort = proxyUDPPacket.getPort();
 
-        writer.println(httpReq);
-        writer.flush();
+            String received = new String(proxyUDPPacket.getData(), 0, proxyUDPPacket.getLength());
 
-        /*writer.println("GET " + destinationUrl.getPath() + " HTTP/1.1");
-        writer.println("Host: " + destinationUrl.getHost());
-        writer.println("Accept: text/html");
-        writer.println("Connection: close");
-        writer.println();
+            //DEBUGGING PURPOSE
+            System.out.println("UDP Packet received from client.");
+            System.out.println(received);
 
-        writer.flush();*/
-
-        InputStream inputStream = socket.getInputStream();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-
-        String line1, line2 = null;
-
-        while ((line1 = reader.readLine()) != null) {
-            line2 += line1 + "\n";
+            sendTCPQueue.add(received);
         }
-        socket.close();
-        return line2;
     }
 
-    public static void main(String[] args){
-        new Proxy().start();
+    private void sendHttpGET_TCP() throws InterruptedException, IOException {
+        //TODO Change this condition!
+        while (true) {
+            if (sendTCPQueue.isEmpty()) {
+                Thread.sleep(200);
+                continue;
+            }
+
+            String data = sendTCPQueue.poll();
+
+            int hostNameBeginInd = data.indexOf("Host: ") + 6;
+            int hostNameEndInd = data.indexOf("Accept: text/html") - 1;
+            String urlHost = data.substring(hostNameBeginInd, hostNameEndInd);
+
+            proxyTCPSocket = new Socket(urlHost, TCP_PORT_NUMBER);
+
+            OutputStream outputStream = proxyTCPSocket.getOutputStream();
+            PrintWriter writer = new PrintWriter(outputStream);
+
+            writer.println(data);
+            writer.flush();
+        }
+    }
+
+    private void receiveHttpGET_TCP() throws IOException, InterruptedException {
+        while (true) {
+            if (proxyTCPSocket == null) {
+                Thread.sleep(200);
+                continue;
+            }
+            InputStream inputStream = proxyTCPSocket.getInputStream();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+
+            String inputLine;
+            StringBuilder stringBuilder = new StringBuilder();
+
+            while ((inputLine = reader.readLine()) != null) {
+                stringBuilder.append(inputLine).append("\n");
+            }
+
+            if (stringBuilder.toString().isEmpty()){
+                Thread.sleep(200);
+                continue;
+            }
+
+            sendUDPQueue.add(stringBuilder.toString());
+        }
+    }
+
+    private void sendHttpGET_UDP() throws InterruptedException, IOException {
+        while (true) {
+            if (sendUDPQueue.isEmpty() || clientAddress == null || clientPort == -1) {
+                Thread.sleep(200);
+                continue;
+            }
+
+            String data = sendUDPQueue.poll();
+
+            if (data == null) {
+                Thread.sleep(200);
+                continue;
+            }
+
+            DatagramPacket proxyUDPPacket = new DatagramPacket(data.getBytes(), data.length(), clientAddress, clientPort);
+            proxyUDPSocket.send(proxyUDPPacket);
+        }
+    }
+
+    private void close() throws IOException {
+        proxyTCPSocket.close();
+        proxyUDPSocket.close();
+    }
+
+    public static void main(String[] args) throws SocketException {
+        Proxy proxy1 = new Proxy();
+        proxy1.proxyReceiveUDPThread.start();
+        proxy1.proxySendTCPThread.start();
+        proxy1.proxyReceiveTCPThread.start();
+        proxy1.proxySendUDPThread.start();
     }
 }
