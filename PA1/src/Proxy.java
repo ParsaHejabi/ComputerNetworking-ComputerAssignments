@@ -5,8 +5,9 @@ import java.net.InetAddress;
 import java.net.Socket;
 
 public class Proxy extends Thread {
-
-    private static final int PORT_NUMBER = 80;
+    static final String PROXY_ADDRESS = "localhost";
+    static final int UDP_PORT_NUMBER = 161;
+    public static final int TCP_PORT_NUMBER = 80;
 
     private DatagramSocket socket;
     private boolean running;
@@ -15,7 +16,7 @@ public class Proxy extends Thread {
 
     public void run() {
         try {
-            socket = new DatagramSocket(4445);
+            socket = new DatagramSocket(UDP_PORT_NUMBER);
             running = true;
 
             while (running) {
@@ -52,7 +53,7 @@ public class Proxy extends Thread {
     }
 
     private static String getHtml_TCP(String urlHost, String httpReq) throws IOException {
-        Socket socket = new Socket(urlHost, PORT_NUMBER);
+        Socket socket = new Socket(urlHost, TCP_PORT_NUMBER);
 
         OutputStream outputStream = socket.getOutputStream();
         PrintWriter writer = new PrintWriter(outputStream);
