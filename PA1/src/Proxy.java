@@ -6,9 +6,7 @@ public class Proxy {
 
     private static final int PORT_NUMBER = 80;
 
-    public static void main(String[] args) throws IOException {
-        URL destinationUrl = new URL("http://example.com/");
-
+    private static void getHtmlTCP(URL destinationUrl) throws IOException{
         Socket socket = new Socket(destinationUrl.getHost(), PORT_NUMBER);
 
         OutputStream outputStream = socket.getOutputStream();
@@ -31,5 +29,12 @@ public class Proxy {
             System.out.println(line);
         }
         socket.close();
+    }
+
+    public static void main(String[] args) throws IOException {
+        URL destinationUrl = new URL("http://example.com/");
+        getHtmlTCP(destinationUrl);
+
+
     }
 }
