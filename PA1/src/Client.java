@@ -3,11 +3,12 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Scanner;
 
-public class Client {
+class Client {
     private static final String projectPath = new File("").getAbsolutePath();
     private static final String HTMLFilesFolder = projectPath + "/HTMLFiles/";
     private static final String HTMLExtension = ".html";
@@ -34,7 +35,7 @@ public class Client {
         proxyAddress = InetAddress.getByName(Proxy.PROXY_ADDRESS);
         sendUDPQueue = new LinkedList<>();
 
-        clientUDPBuffer = new byte[4194304];
+        clientUDPBuffer = new byte[16777216];
 
         scanner = new Scanner(System.in);
 
@@ -78,7 +79,7 @@ public class Client {
             httpReq += "Connection: close\n";
 
             //sending http udp request
-            clientUDPBuffer = httpReq.getBytes();
+            byte[] clientUDPBuffer = httpReq.getBytes(StandardCharsets.UTF_8);
             DatagramPacket clientUDPPacket = new DatagramPacket(clientUDPBuffer, clientUDPBuffer.length, proxyAddress, Proxy.UDP_PORT_NUMBER);
             clientUDPSocket.send(clientUDPPacket);
             Thread.sleep(2000);
@@ -91,7 +92,7 @@ public class Client {
             //receiving http udp response
             DatagramPacket clientUDPPacket = new DatagramPacket(clientUDPBuffer, clientUDPBuffer.length);
             clientUDPSocket.receive(clientUDPPacket);
-            String received = new String(clientUDPPacket.getData(), 0, clientUDPPacket.getLength());
+            String received = new String(clientUDPPacket.getData(), 0, clientUDPPacket.getLength(), StandardCharsets.UTF_8);
 
             //DEBUGGING PURPOSE
             System.out.println("UDP Packet received from proxy.");
@@ -102,10 +103,12 @@ public class Client {
             switch (statusCode) {
                 case "301":
                 case "302":
+                    int lastInd = received.indexOf("\n", 9);
+                    System.out.println(received.substring(9, lastInd));
                     System.out.println("Redirecting...");
-                    int indx1 = received.indexOf("Location: ") + 10;
-                    int indx2 = received.indexOf("\n", indx1);
-                    String newLocation = received.substring(indx1, indx2);
+                    int index1 = received.indexOf("Location: ") + 10;
+                    int index2 = received.indexOf("\n", index1);
+                    String newLocation = received.substring(index1, index2);
 
                     sendUDPQueue.add(newLocation);
                     break;

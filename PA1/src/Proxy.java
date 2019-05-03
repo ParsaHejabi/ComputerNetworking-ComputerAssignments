@@ -1,9 +1,10 @@
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.Queue;
 
-public class Proxy {
+class Proxy {
 
     static final String PROXY_ADDRESS = "localhost";
     static final int UDP_PORT_NUMBER = 161;
@@ -27,7 +28,7 @@ public class Proxy {
     public Proxy() throws SocketException {
         proxyUDPSocket = new DatagramSocket(UDP_PORT_NUMBER);
 
-        proxyUDPBuffer = new byte[4194304];
+        proxyUDPBuffer = new byte[16777216];
 
         sendTCPQueue = new LinkedList<>();
         sendUDPQueue = new LinkedList<>();
@@ -75,7 +76,7 @@ public class Proxy {
             clientAddress = proxyUDPPacket.getAddress();
             clientPort = proxyUDPPacket.getPort();
 
-            String received = new String(proxyUDPPacket.getData(), 0, proxyUDPPacket.getLength());
+            String received = new String(proxyUDPPacket.getData(), 0, proxyUDPPacket.getLength(), StandardCharsets.UTF_8);
 
             //DEBUGGING PURPOSE
             System.out.println("UDP Packet received from client.");
@@ -143,14 +144,15 @@ public class Proxy {
             }
 
             String data = sendUDPQueue.poll();
-            System.out.println(data);
+            //System.out.println(data);
 
             if (data == null) {
                 Thread.sleep(200);
                 continue;
             }
 
-            DatagramPacket proxyUDPPacket = new DatagramPacket(data.getBytes(), data.length(), clientAddress, clientPort);
+            System.out.println(data);
+            DatagramPacket proxyUDPPacket = new DatagramPacket(data.getBytes(StandardCharsets.UTF_8), data.length(), clientAddress, clientPort);
             proxyUDPSocket.send(proxyUDPPacket);
         }
     }
