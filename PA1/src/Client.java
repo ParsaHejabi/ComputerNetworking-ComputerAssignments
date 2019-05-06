@@ -1,12 +1,7 @@
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.Scanner;
+import java.util.*;
 
 class Client {
     private static final String projectPath = new File("").getAbsolutePath();
@@ -14,7 +9,9 @@ class Client {
     private static final String HTMLExtension = ".html";
 
     private DatagramSocket clientUDPSocket;
+    private Socket clientTCPSocket;
     private InetAddress proxyAddress;
+    private static final int PROXY_PORT_NUMBER_TCP = 53;
 
     private URL destinationURL;
 
@@ -30,6 +27,8 @@ class Client {
 
     private Queue<String> sendUDPQueue;
 
+    private String DNSDomain;
+
     Client() throws IOException {
         clientUDPSocket = new DatagramSocket();
         proxyAddress = InetAddress.getByName(Proxy.PROXY_ADDRESS);
@@ -39,18 +38,34 @@ class Client {
 
         scanner = new Scanner(System.in);
 
-        clientSendUDPThread = new Thread(() -> {
+//        clientSendUDPThread = new Thread(() -> {
+//            try {
+//                this.sendHttpGET_UDP();
+//            } catch (IOException | InterruptedException e) {
+//                e.printStackTrace();
+//            }
+//        });
+//
+//        clientReceiveUDPThread = new Thread(() -> {
+//            try {
+//                receiveHttpGET_UDP();
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//        });
+
+        clientSendTCPThread = new Thread(() -> {
             try {
-                this.sendHttpGET_UDP();
+                sendDNSmsg_TCP();
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         });
 
-        clientReceiveUDPThread = new Thread(() -> {
+        clientReceiveTCPThread = new Thread(() -> {
             try {
-                receiveHttpGET_UDP();
-            } catch (IOException e) {
+                receiveDNSmsg_TCP();
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         });
@@ -62,8 +77,7 @@ class Client {
             if (!sendUDPQueue.isEmpty()) {
                 String s = sendUDPQueue.poll();
                 this.destinationURL = new URL(s);
-            }
-            else {
+            } else {
                 System.out.println("Enter host name to send HTTP UDP packet to proxy: ");
                 String s = scanner.next();
                 if (s.equals("END")) {
@@ -73,16 +87,33 @@ class Client {
                 this.destinationURL = new URL(s);
             }
 
-            String httpReq = "GET " + destinationURL.getPath() + " HTTP/1.1\n";
-            httpReq += "Host: " + destinationURL.getHost() + "\n";
-            httpReq += "Accept: text/html\n";
-            httpReq += "Connection: close\n";
+            boolean isCached = false;
+            File folder = new File(HTMLFilesFolder);
+            File[] listOfFiles = folder.listFiles();
+            for (File listOfFile : listOfFiles) {
+                if (listOfFile.isFile()) {
+                    if (listOfFile.getName().equals(destinationURL.getHost() + HTMLExtension)) {
+                        System.out.println("The webpage is cached already!");
+                        isCached = true;
+                    }
+                }
+            }
 
-            //sending http udp request
-            byte[] clientUDPBuffer = httpReq.getBytes(StandardCharsets.UTF_8);
-            DatagramPacket clientUDPPacket = new DatagramPacket(clientUDPBuffer, clientUDPBuffer.length, proxyAddress, Proxy.UDP_PORT_NUMBER);
-            clientUDPSocket.send(clientUDPPacket);
-            Thread.sleep(2000);
+            if (isCached) {
+                Thread.sleep(2000);
+            }
+            else {
+                String httpReq = "GET " + destinationURL.getPath() + " HTTP/1.1\n";
+                httpReq += "Host: " + destinationURL.getHost() + "\n";
+                httpReq += "Accept: text/html\n";
+                httpReq += "Connection: close\n";
+
+                //sending http udp request
+                byte[] clientUDPBuffer = httpReq.getBytes(StandardCharsets.UTF_8);
+                DatagramPacket clientUDPPacket = new DatagramPacket(clientUDPBuffer, clientUDPBuffer.length, proxyAddress, Proxy.UDP_PORT_NUMBER);
+                clientUDPSocket.send(clientUDPPacket);
+                Thread.sleep(2000);
+            }
         }
     }
 
@@ -126,15 +157,89 @@ class Client {
         }
     }
 
+    private void sendDNSmsg_TCP() throws IOException, InterruptedException {
+        //TODO Change this condition!
+        while (true) {
+            System.out.println("Please enter domain name:");
+            Scanner input = new Scanner(System.in);
+            DNSDomain = input.next();
+
+            boolean isCached = false;
+            HashMap<String,String> strings = getAllDNSRequestsHostName();
+            for (Map.Entry<String, String> entry : strings.entrySet()) {
+                if (DNSDomain.equals(entry.getKey())) {
+                    System.out.println("DNS query cached already!");
+                    isCached = true;
+                    break;
+                }
+            }
+
+            if (isCached) {
+                Thread.sleep(2000);
+            }
+            else {
+                System.out.println("A(1) or CName(2)?");
+                int ac = input.nextInt();
+                clientTCPSocket = new Socket(proxyAddress, PROXY_PORT_NUMBER_TCP);
+
+                OutputStream outputStream = clientTCPSocket.getOutputStream();
+                PrintWriter writer = new PrintWriter(outputStream);
+
+                if (ac == 1)
+                    writer.println("a");
+                else
+                    writer.println("c");
+
+                writer.print(DNSDomain);
+                writer.flush();
+                Thread.sleep(2000);
+            }
+        }
+    }
+
+    private HashMap<String,String> getAllDNSRequestsHostName() throws IOException {
+        HashMap<String,String> answer = new HashMap<>();
+        BufferedReader reader = new BufferedReader(new FileReader(HTMLFilesFolder + "DNS.txt"));
+        String line = reader.readLine();
+        while (line != null) {
+            String[] lines = line.split("#");
+            answer.put(lines[0],lines[1]);
+            line = reader.readLine();
+        }
+        reader.close();
+        return answer;
+    }
+
+    private void receiveDNSmsg_TCP() throws IOException, InterruptedException {
+        //TODO Change this condition!
+        while (true) {
+            if (clientTCPSocket == null) {
+                Thread.sleep(200);
+                continue;
+            }
+            InputStream input = clientTCPSocket.getInputStream();
+            byte[] received = new byte[4096];
+            int count = input.read(received);
+            System.out.println("DNS TCP Packet received from proxy.");
+            System.out.println("Number of bytes read: " + count);
+            String out = new String(received, 0, count);
+            clientBufferedWriter = new BufferedWriter(new FileWriter(HTMLFilesFolder + "DNS.txt", true));
+            clientBufferedWriter.write(DNSDomain + "#" + out + "\n");
+            clientBufferedWriter.flush();
+        }
+    }
+
     private void close() throws IOException {
         clientUDPSocket.close();
         clientBufferedWriter.close();
         scanner.close();
     }
 
-    public static void main(String[] args) throws IOException{
+    public static void main(String[] args) throws IOException {
         Client client1 = new Client();
-        client1.clientSendUDPThread.start();
-        client1.clientReceiveUDPThread.start();
+//        client1.clientSendUDPThread.start();
+//        client1.clientReceiveUDPThread.start();
+        client1.clientSendTCPThread.start();
+        client1.clientReceiveTCPThread.start();
     }
 }

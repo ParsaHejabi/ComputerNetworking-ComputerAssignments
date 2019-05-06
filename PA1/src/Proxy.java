@@ -3,12 +3,18 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.Queue;
+import org.xbill.DNS.*;
 
 class Proxy {
-
     static final String PROXY_ADDRESS = "localhost";
     static final int UDP_PORT_NUMBER = 161;
     private static final int TCP_PORT_NUMBER = 80;
+    private static final int PROXY_TCP_PORT_NUMBER = 53;
+
+    private ServerSocket proxyTCPServerSocket;
+    private Socket clientSocket;
+    private OutputStream DNSOutputStream;
+    private InputStream DNSInputStream;
 
     private Socket proxyTCPSocket;
     private DatagramSocket proxyUDPSocket;
@@ -22,44 +28,77 @@ class Proxy {
     private Thread proxySendTCPThread;
     private Thread proxyReceiveTCPThread;
 
+    private Thread proxyDNSReceiveTCPThread;
+    private Thread proxyDNSSendAndReceiveUDPThread;
+    private Thread proxyDNSSendTCPThread;
+
     private Queue<String> sendTCPQueue;
     private Queue<String> sendUDPQueue;
+    private Queue<String> sendDNSTCPQueue;
+    private Queue<String> sendDNSUDPQueue;
 
-    public Proxy() throws SocketException {
+    public Proxy() throws IOException {
         proxyUDPSocket = new DatagramSocket(UDP_PORT_NUMBER);
+        proxyTCPServerSocket = new ServerSocket(PROXY_TCP_PORT_NUMBER);
 
         proxyUDPBuffer = new byte[16777216];
 
         sendTCPQueue = new LinkedList<>();
         sendUDPQueue = new LinkedList<>();
+        sendDNSTCPQueue = new LinkedList<>();
+        sendDNSUDPQueue = new LinkedList<>();
 
-        proxyReceiveUDPThread = new Thread(() -> {
+//        proxyReceiveUDPThread = new Thread(() -> {
+//            try {
+//                receiveHttpGET_UDP();
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//        });
+//
+//        proxySendTCPThread = new Thread(() -> {
+//            try {
+//                sendHttpGET_TCP();
+//            } catch (InterruptedException | IOException e) {
+//                e.printStackTrace();
+//            }
+//        });
+//
+//        proxyReceiveTCPThread = new Thread(() -> {
+//            try {
+//                receiveHttpGET_TCP();
+//            } catch (IOException | InterruptedException e) {
+//                e.printStackTrace();
+//            }
+//        });
+//
+//        proxySendUDPThread = new Thread(() -> {
+//            try {
+//                sendHttpGET_UDP();
+//            } catch (InterruptedException | IOException e) {
+//                e.printStackTrace();
+//            }
+//        });
+
+        proxyDNSReceiveTCPThread = new Thread(() -> {
             try {
-                receiveHttpGET_UDP();
+                receiveDNS_TCP();
             } catch (IOException e) {
                 e.printStackTrace();
             }
         });
 
-        proxySendTCPThread = new Thread(() -> {
+        proxyDNSSendAndReceiveUDPThread = new Thread(() -> {
             try {
-                sendHttpGET_TCP();
-            } catch (InterruptedException | IOException e) {
-                e.printStackTrace();
-            }
-        });
-
-        proxyReceiveTCPThread = new Thread(() -> {
-            try {
-                receiveHttpGET_TCP();
+                sendAndReceiveDNS_UDP();
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         });
 
-        proxySendUDPThread = new Thread(() -> {
+        proxyDNSSendTCPThread = new Thread(() -> {
             try {
-                sendHttpGET_UDP();
+                sendDNS_TCP();
             } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
             }
@@ -95,6 +134,8 @@ class Proxy {
             }
 
             String data = sendTCPQueue.poll();
+
+            System.out.println(data);
 
             int hostNameBeginInd = data.indexOf("Host: ") + 6;
             int hostNameEndInd = data.indexOf("Accept: text/html") - 1;
@@ -157,16 +198,80 @@ class Proxy {
         }
     }
 
+    private void receiveDNS_TCP() throws IOException {
+        //TODO Change this condition!
+        while (true) {
+            //Receiving DNS packet from client (TCP)
+            clientSocket = proxyTCPServerSocket.accept();
+            System.out.println("Client connected to send DNS packet via TCP.");
+
+            DNSInputStream = clientSocket.getInputStream();
+            byte[] received = new byte[4096];
+            int count = DNSInputStream.read(received);
+
+            //DEBUGGING PURPOSE
+            System.out.println("DNS TCP Packet received from client.");
+            System.out.println("Number of bytes read: " + count);
+
+            String out = new String(received, 0, count);
+//            System.out.println(out);
+            sendDNSUDPQueue.add(out);
+        }
+    }
+
+    private void sendAndReceiveDNS_UDP() throws IOException, InterruptedException {
+        //TODO Change this condition!
+        while (true) {
+            if (sendDNSUDPQueue.isEmpty()) {
+                Thread.sleep(200);
+                continue;
+            }
+
+            String data = sendDNSUDPQueue.poll();
+
+            if (data.startsWith("a")){
+                InetAddress addr = Address.getByName(data.split("\n")[1]);
+                System.out.println("DNS answer received from DNS server:");
+                System.out.println(addr.getHostAddress());
+                sendDNSTCPQueue.add(addr.getHostAddress());
+            }
+            else if (data.startsWith("c")){
+                InetAddress addr = Address.getByName(data.split("\n")[1]);
+                System.out.println("DNS answer received from DNS server:");
+                System.out.println(addr.getCanonicalHostName());
+                sendDNSTCPQueue.add(addr.getCanonicalHostName());
+            }
+        }
+    }
+
+    private void sendDNS_TCP() throws InterruptedException, IOException {
+        while (true) {
+            if (sendDNSTCPQueue.isEmpty()) {
+                Thread.sleep(200);
+                continue;
+            }
+
+            String data = sendDNSTCPQueue.poll();
+
+            DNSOutputStream = clientSocket.getOutputStream();
+            DNSOutputStream.write(data.getBytes());
+        }
+    }
+
     private void close() throws IOException {
         proxyTCPSocket.close();
         proxyUDPSocket.close();
     }
 
-    public static void main(String[] args) throws SocketException {
+    public static void main(String[] args) throws IOException {
         Proxy proxy1 = new Proxy();
-        proxy1.proxyReceiveUDPThread.start();
-        proxy1.proxySendTCPThread.start();
-        proxy1.proxyReceiveTCPThread.start();
-        proxy1.proxySendUDPThread.start();
+//        proxy1.proxyReceiveUDPThread.start();
+//        proxy1.proxySendTCPThread.start();
+//        proxy1.proxyReceiveTCPThread.start();
+//        proxy1.proxySendUDPThread.start();
+
+        proxy1.proxyDNSReceiveTCPThread.start();
+        proxy1.proxyDNSSendAndReceiveUDPThread.start();
+        proxy1.proxyDNSSendTCPThread.start();
     }
 }
