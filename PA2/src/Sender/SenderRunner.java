@@ -7,6 +7,9 @@ public class SenderRunner {
 
     public static void main(String[] args) throws IOException {
         sender = createSender(args);
+        sender.senderMoveWindowThread.start();
+        sender.senderReceiveThread.start();
+        sender.senderSendThread.start();
     }
 
     private static Sender createSender(String[] args) throws IOException {

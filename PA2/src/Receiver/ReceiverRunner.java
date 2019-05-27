@@ -7,6 +7,9 @@ public class ReceiverRunner {
 
     public static void main(String[] args) throws IOException {
         receiver = createReceiver(args);
+        receiver.receiverSendThread.start();
+        receiver.receiverMoveWindowThread.start();
+        receiver.receiverReceiveThread.start();
     }
 
     private static Receiver createReceiver(String[] args) throws IOException {

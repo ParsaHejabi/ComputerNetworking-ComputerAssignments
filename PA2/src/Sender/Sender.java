@@ -3,6 +3,10 @@ package Sender;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -25,31 +29,49 @@ public class Sender {
     private FileWriter logFileWriter;
 
     private DateFormat dateFormat;
+    private int[] bitmap;
+    private int leftIndex;
 
-    private Thread senderSendThread;
-    private Thread senderReceiveThread;
-    private Thread senderMoveWindowThread;
+    Thread senderSendThread;
+    Thread senderReceiveThread;
+    Thread senderMoveWindowThread;
 
     private Queue<SenderPacket> packetsQueue;
 
-    public Sender() {
+    private DatagramSocket datagramSocket;
+
+    Sender() throws IOException {
         dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
         packetsQueue = new LinkedList<>();
+        datagramSocket = new DatagramSocket();
+        leftIndex = 0;
 
         senderSendThread = new Thread(() -> {
-
+            try {
+                sendMessage();
+            } catch (InterruptedException | IOException e) {
+                e.printStackTrace();
+            }
         });
 
         senderReceiveThread = new Thread(() -> {
-
+            try {
+                receiveAck();
+            } catch (IOException ioe) {
+                ioe.printStackTrace();
+            }
         });
 
         senderMoveWindowThread = new Thread(() -> {
-
+            try {
+                senderMoveWindow();
+            } catch (InterruptedException ie) {
+                ie.printStackTrace();
+            }
         });
     }
 
-    public Sender(String ip, int port, int num, int l) {
+    Sender(String ip, int port, int num, int l) throws IOException {
         this();
 
         this.ip = ip;
@@ -57,9 +79,14 @@ public class Sender {
         this.num = num;
         this.win = 128;
         this.l = l;
+
+        for (int i = 0; i < win; i++) {
+            packetsQueue.add(new SenderPacket((byte) i, (byte) num));
+        }
+        bitmap = new int[num];
     }
 
-    public Sender(String ip, int port, int num, int win, int l) {
+    Sender(String ip, int port, int num, int win, int l) throws IOException {
         this();
 
         this.ip = ip;
@@ -69,7 +96,7 @@ public class Sender {
         this.l = l;
     }
 
-    public Sender(String ip, int port, int num, int l, String logFileAddress) throws IOException {
+    Sender(String ip, int port, int num, int l, String logFileAddress) throws IOException {
         this();
 
         this.ip = ip;
@@ -82,7 +109,7 @@ public class Sender {
         createLogFile(logFileAddress);
     }
 
-    public Sender(String ip, int port, int num, int win, int l, String logFileAddress) throws IOException {
+    Sender(String ip, int port, int num, int win, int l, String logFileAddress) throws IOException {
         this();
 
         this.ip = ip;
@@ -107,6 +134,61 @@ public class Sender {
             DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
             System.out.println(dateFormat.format(new Date()) + ":\tFailed to create log file directory. exiting application.");
             System.exit(2);
+        }
+    }
+
+    private void sendMessage() throws InterruptedException, UnknownHostException, IOException {
+        /***
+         * TODO change sendMessage to send packets according to current window (it only send the first 128 packets now)
+         */
+        while (true) {
+            while (packetsQueue.isEmpty()) Thread.sleep(50);
+            SenderPacket sp = packetsQueue.poll();
+            DatagramPacket message = new DatagramPacket(sp.getData(), sp.getData().length, InetAddress.getByName(ip), port);
+            datagramSocket.send(message);
+            System.out.println("Message #" + sp.getData()[0] + " sent.");
+
+        }
+    }
+
+    private void receiveAck() throws IOException {
+        byte[] ack = new byte[2 + win / 8];
+        DatagramPacket dp = new DatagramPacket(ack, ack.length);
+        datagramSocket.receive(dp);
+        System.out.print("Ack received: ");
+        int leftAckIndex = (int) ack[0];
+        for (int i = 0; i < win / 8; i++) {
+            String s = String.format("%8s", Integer.toBinaryString(ack[i + 2] & 0xFF));
+            for (int j = 0; j < 8; j++) {
+                bitmap[leftAckIndex + i * 8 + j] = s.charAt(j) - 48;
+                System.out.print(bitmap[leftAckIndex + i * 8 + j]);
+            }
+        }
+        System.out.println();
+    }
+
+    private void senderMoveWindow() throws InterruptedException {
+        while (true) {
+            if (bitmap[leftIndex] == 1) {
+                leftIndex++;
+                System.out.println("Window move: 1\tCurrent window start index: " + leftIndex);
+            } else {
+                int ones = 0;
+                int remained = num - leftIndex > win ? win : num - leftIndex;
+                //COUNTING ONES IN CURRENT WINDOW
+                for (int i = leftIndex; i < leftIndex + remained; i++) {
+                    ones += bitmap[i];
+                }
+                //CHECKING IF THE WINDOW CAN BE MOVED
+                if (((remained - ones) / remained) * 100 < l) {
+                    leftIndex += remained;
+                    System.out.println("Window move: " + remained + "\tCurrent window start index: " + leftIndex);
+                    if (leftIndex == num - 1) {//END OF PROGRAM
+
+                    }
+                }
+            }
+            Thread.sleep(75);
         }
     }
 }

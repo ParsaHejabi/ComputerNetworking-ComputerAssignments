@@ -21,6 +21,8 @@ public class SenderPacket {
 
     //TODO complete this method
     private void makeHeader(byte[] data, byte sequenceNumber, byte numberOfPackets) {
+        data[0] = sequenceNumber;
+        data[1] = numberOfPackets;
     }
 
     public byte[] getData() {
