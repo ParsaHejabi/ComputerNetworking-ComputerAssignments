@@ -1,5 +1,7 @@
 package Receiver;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.IOException;
 
 public class ReceiverRunner {
@@ -7,12 +9,12 @@ public class ReceiverRunner {
 
     public static void main(String[] args) throws IOException {
         receiver = createReceiver(args);
-        receiver.receiverSendThread.start();
-        receiver.receiverMoveWindowThread.start();
         receiver.receiverReceiveThread.start();
+        receiver.receiverMoveWindowThread.start();
+        receiver.receiverSendThread.start();
     }
 
-    private static Receiver createReceiver(String[] args) throws IOException {
+    private static Receiver createReceiver(@NotNull String[] args) throws IOException {
         Receiver receiver = null;
 
         int port = Integer.parseInt(args[0]);
@@ -35,7 +37,7 @@ public class ReceiverRunner {
                 receiver = new Receiver(port, num, Integer.parseInt(args[2]), logFileAddress);
             }
         } else {
-            receiver = new Receiver(port, num, Integer.parseInt(args[3]), Integer.parseInt(args[4]), args[5]);
+            receiver = new Receiver(port, num, Integer.parseInt(args[2]), Integer.parseInt(args[3]), args[4]);
         }
 
         return receiver;

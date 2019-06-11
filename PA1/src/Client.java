@@ -14,6 +14,7 @@ class Client {
     private static final int PROXY_PORT_NUMBER_TCP = 53;
 
     private URL destinationURL;
+    private String hostNameString;
 
     private byte[] clientUDPBuffer;
 
@@ -26,10 +27,13 @@ class Client {
     private Scanner scanner;
 
     private Queue<String> sendUDPQueue;
+    private Queue<String> sendTCPQueue;
 
     private String DNSDomain;
 
-    Client() throws IOException {
+    private long startTime;
+
+    private Client() throws IOException {
         clientUDPSocket = new DatagramSocket();
         proxyAddress = InetAddress.getByName(Proxy.PROXY_ADDRESS);
         sendUDPQueue = new LinkedList<>();
@@ -38,39 +42,40 @@ class Client {
 
         scanner = new Scanner(System.in);
 
-//        clientSendUDPThread = new Thread(() -> {
+        clientSendUDPThread = new Thread(() -> {
+            try {
+                this.sendHttpGET_UDP();
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+
+        clientReceiveUDPThread = new Thread(() -> {
+            try {
+                receiveHttpGET_UDP();
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+
+//        clientSendTCPThread = new Thread(() -> {
 //            try {
-//                this.sendHttpGET_UDP();
+//                sendDNSmsg_TCP();
 //            } catch (IOException | InterruptedException e) {
 //                e.printStackTrace();
 //            }
 //        });
 //
-//        clientReceiveUDPThread = new Thread(() -> {
+//        clientReceiveTCPThread = new Thread(() -> {
 //            try {
-//                receiveHttpGET_UDP();
-//            } catch (IOException e) {
+//                receiveDNSmsg_TCP();
+//            } catch (IOException | InterruptedException e) {
 //                e.printStackTrace();
 //            }
 //        });
-
-        clientSendTCPThread = new Thread(() -> {
-            try {
-                sendDNSmsg_TCP();
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        });
-
-        clientReceiveTCPThread = new Thread(() -> {
-            try {
-                receiveDNSmsg_TCP();
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        });
     }
 
+    //HTTP requests
     private void sendHttpGET_UDP() throws IOException, InterruptedException {
         //TODO Change this condition!
         while (true) {
@@ -79,17 +84,18 @@ class Client {
                 this.destinationURL = new URL(s);
             } else {
                 System.out.println("Enter host name to send HTTP UDP packet to proxy: ");
-                String s = scanner.next();
-                if (s.equals("END")) {
+                hostNameString = scanner.next();
+                if (hostNameString.equals("END")) {
                     close();
                     break;
                 }
-                this.destinationURL = new URL(s);
+                this.destinationURL = new URL(hostNameString);
             }
 
             boolean isCached = false;
             File folder = new File(HTMLFilesFolder);
             File[] listOfFiles = folder.listFiles();
+            assert listOfFiles != null;
             for (File listOfFile : listOfFiles) {
                 if (listOfFile.isFile()) {
                     if (listOfFile.getName().equals(destinationURL.getHost() + HTMLExtension)) {
@@ -101,8 +107,8 @@ class Client {
 
             if (isCached) {
                 Thread.sleep(2000);
-            }
-            else {
+            } else {
+                startTime = System.currentTimeMillis();
                 String httpReq = "GET " + destinationURL.getPath() + " HTTP/1.1\n";
                 httpReq += "Host: " + destinationURL.getHost() + "\n";
                 httpReq += "Accept: text/html\n";
@@ -117,46 +123,62 @@ class Client {
         }
     }
 
-    private void receiveHttpGET_UDP() throws IOException {
+    private void receiveHttpGET_UDP() throws IOException, InterruptedException {
         //TODO Change this condition!
         while (true) {
+            if (destinationURL == null) {
+                Thread.sleep(2000);
+                continue;
+            }
             //receiving http udp response
             DatagramPacket clientUDPPacket = new DatagramPacket(clientUDPBuffer, clientUDPBuffer.length);
-            clientUDPSocket.receive(clientUDPPacket);
-            String received = new String(clientUDPPacket.getData(), 0, clientUDPPacket.getLength(), StandardCharsets.UTF_8);
+            long elapsedTime = System.currentTimeMillis() - startTime;
+            long elapsedSeconds = elapsedTime / 1000;
+            long secondsDisplay = elapsedSeconds % 60;
+            //TODO put standard timeout time here
+            if (secondsDisplay >= 1) {
+                System.out.println("Your HTTP request timed out! Sending your request again!");
+                sendUDPQueue.add(hostNameString);
+                Thread.sleep(500);
+            }
+            else {
+                clientUDPSocket.receive(clientUDPPacket);
+                String received = new String(clientUDPPacket.getData(), 0, clientUDPPacket.getLength(), StandardCharsets.UTF_8);
 
-            //DEBUGGING PURPOSE
-            System.out.println("UDP Packet received from proxy.");
-            //System.out.println(received);
+                //DEBUGGING PURPOSE
+                System.out.println("UDP Packet received from proxy.");
+                //System.out.println(received);
 
-            String statusCode = received.substring(9, 12);
+                String statusCode = received.substring(9, 12);
 
-            switch (statusCode) {
-                case "301":
-                case "302":
-                    int lastInd = received.indexOf("\n", 9);
-                    System.out.println(received.substring(9, lastInd));
-                    System.out.println("Redirecting...");
-                    int index1 = received.indexOf("Location: ") + 10;
-                    int index2 = received.indexOf("\n", index1);
-                    String newLocation = received.substring(index1, index2);
+                switch (statusCode) {
+                    case "301":
+                    case "302":
+                        int lastInd = received.indexOf("\n", 9);
+                        System.out.println(received.substring(9, lastInd));
+                        System.out.println("Redirecting...");
+                        int index1 = received.indexOf("Location: ") + 10;
+                        int index2 = received.indexOf("\n", index1);
+                        String newLocation = received.substring(index1, index2);
 
-                    sendUDPQueue.add(newLocation);
-                    break;
-                case "404":
-                    System.out.println("404 Not Found. Try again!");
-                    break;
-                case "200":
-                    int responseBodyBegin = received.indexOf("\n\n") + 2;
+                        sendUDPQueue.add(newLocation);
+                        break;
+                    case "404":
+                        System.out.println("404 Not Found. Try again!");
+                        break;
+                    case "200":
+                        int responseBodyBegin = received.indexOf("\n\n") + 2;
 
-                    clientBufferedWriter = new BufferedWriter(new FileWriter(HTMLFilesFolder + this.destinationURL.getHost() + HTMLExtension));
-                    clientBufferedWriter.write(received.substring(responseBodyBegin));
-                    clientBufferedWriter.flush();
-                    break;
+                        clientBufferedWriter = new BufferedWriter(new FileWriter(HTMLFilesFolder + this.destinationURL.getHost() + HTMLExtension));
+                        clientBufferedWriter.write(received.substring(responseBodyBegin));
+                        clientBufferedWriter.flush();
+                        break;
+                }
             }
         }
     }
 
+    //DNS requests
     private void sendDNSmsg_TCP() throws IOException, InterruptedException {
         //TODO Change this condition!
         while (true) {
@@ -165,7 +187,7 @@ class Client {
             DNSDomain = input.next();
 
             boolean isCached = false;
-            HashMap<String,String> strings = getAllDNSRequestsHostName();
+            HashMap<String, String> strings = getAllDNSRequestsHostName();
             for (Map.Entry<String, String> entry : strings.entrySet()) {
                 if (DNSDomain.equals(entry.getKey())) {
                     System.out.println("DNS query cached already!");
@@ -176,8 +198,7 @@ class Client {
 
             if (isCached) {
                 Thread.sleep(2000);
-            }
-            else {
+            } else {
                 System.out.println("A(1) or CName(2)?");
                 int ac = input.nextInt();
                 clientTCPSocket = new Socket(proxyAddress, PROXY_PORT_NUMBER_TCP);
@@ -197,13 +218,20 @@ class Client {
         }
     }
 
-    private HashMap<String,String> getAllDNSRequestsHostName() throws IOException {
-        HashMap<String,String> answer = new HashMap<>();
-        BufferedReader reader = new BufferedReader(new FileReader(HTMLFilesFolder + "DNS.txt"));
+    private HashMap<String, String> getAllDNSRequestsHostName() throws IOException {
+        HashMap<String, String> answer = new HashMap<>();
+        BufferedReader reader;
+        try {
+            reader = new BufferedReader(new FileReader(HTMLFilesFolder + "DNS.txt"));
+        } catch (FileNotFoundException e) {
+            File file = new File(HTMLFilesFolder + "DNS.txt");
+            file.createNewFile();
+            reader = new BufferedReader(new FileReader(HTMLFilesFolder + "DNS.txt"));
+        }
         String line = reader.readLine();
         while (line != null) {
             String[] lines = line.split("#");
-            answer.put(lines[0],lines[1]);
+            answer.put(lines[0], lines[1]);
             line = reader.readLine();
         }
         reader.close();
@@ -237,9 +265,9 @@ class Client {
 
     public static void main(String[] args) throws IOException {
         Client client1 = new Client();
-//        client1.clientSendUDPThread.start();
-//        client1.clientReceiveUDPThread.start();
-        client1.clientSendTCPThread.start();
-        client1.clientReceiveTCPThread.start();
+        client1.clientSendUDPThread.start();
+        client1.clientReceiveUDPThread.start();
+//        client1.clientSendTCPThread.start();
+//        client1.clientReceiveTCPThread.start();
     }
 }

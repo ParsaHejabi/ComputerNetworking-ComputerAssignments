@@ -1,19 +1,23 @@
 package Sender;
 
+import Packet.Packet;
+import Packet.SenderPacket;
+import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.Queue;
 
-public class Sender {
+class Sender {
     private static final String projectPath = new File("./Logs").getAbsolutePath();
 
     private String ip;
@@ -29,26 +33,30 @@ public class Sender {
     private FileWriter logFileWriter;
 
     private DateFormat dateFormat;
-    private int[] bitmap;
-    private int leftIndex;
 
     Thread senderSendThread;
     Thread senderReceiveThread;
     Thread senderMoveWindowThread;
 
-    private Queue<SenderPacket> packetsQueue;
+    private ArrayList<SenderPacket> senderPackets;
+    private Queue<SenderPacket> sendingQueue;
+    private ArrayList<Long> startTimes;
+
+    //-1 when ack is received in Sender otherwise number of times it has been sent
+    private int[] senderBitmap;
+    private int windowLeftIndex;
 
     private DatagramSocket datagramSocket;
 
-    Sender() throws IOException {
+    private Sender() throws IOException {
         dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-        packetsQueue = new LinkedList<>();
+        sendingQueue = new LinkedList<>();
         datagramSocket = new DatagramSocket();
-        leftIndex = 0;
+        windowLeftIndex = 0;
 
         senderSendThread = new Thread(() -> {
             try {
-                sendMessage();
+                sendPacket();
             } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
             }
@@ -62,13 +70,7 @@ public class Sender {
             }
         });
 
-        senderMoveWindowThread = new Thread(() -> {
-            try {
-                senderMoveWindow();
-            } catch (InterruptedException ie) {
-                ie.printStackTrace();
-            }
-        });
+        senderMoveWindowThread = new Thread(this::senderMoveWindow);
     }
 
     Sender(String ip, int port, int num, int l) throws IOException {
@@ -80,10 +82,7 @@ public class Sender {
         this.win = 128;
         this.l = l;
 
-        for (int i = 0; i < win; i++) {
-            packetsQueue.add(new SenderPacket((byte) i, (byte) num));
-        }
-        bitmap = new int[num];
+        initSenderPackets();
     }
 
     Sender(String ip, int port, int num, int win, int l) throws IOException {
@@ -94,6 +93,10 @@ public class Sender {
         this.num = num;
         this.win = win;
         this.l = l;
+
+        senderBitmap = new int[num];
+
+        initSenderPackets();
     }
 
     Sender(String ip, int port, int num, int l, String logFileAddress) throws IOException {
@@ -107,6 +110,10 @@ public class Sender {
 
         this.logFileAddress = logFileAddress;
         createLogFile(logFileAddress);
+
+        senderBitmap = new int[num];
+
+        initSenderPackets();
     }
 
     Sender(String ip, int port, int num, int win, int l, String logFileAddress) throws IOException {
@@ -119,11 +126,14 @@ public class Sender {
         this.l = l;
 
         this.logFileAddress = logFileAddress;
-
         createLogFile(logFileAddress);
+
+        senderBitmap = new int[num];
+
+        initSenderPackets();
     }
 
-    private void createLogFile(String logFileAddress) throws IOException {
+    private void createLogFile(@NotNull String logFileAddress) throws IOException {
         int lastSlashIndex = logFileAddress.lastIndexOf("/");
         String dirs = logFileAddress.substring(0, lastSlashIndex);
         if (new File(projectPath + dirs).mkdirs()) {
@@ -137,58 +147,84 @@ public class Sender {
         }
     }
 
-    private void sendMessage() throws InterruptedException, UnknownHostException, IOException {
-        /***
-         * TODO change sendMessage to send packets according to current window (it only send the first 128 packets now)
-         */
+
+    /**
+     * @throws InterruptedException if any thread has interrupted the current thread. The
+     *                              <i>interrupted status</i> of the current thread is
+     *                              cleared when this exception is thrown.
+     * @throws IOException          if an I/O error occurs.
+     */
+    private void sendPacket() throws InterruptedException, IOException {
         while (true) {
-            while (packetsQueue.isEmpty()) Thread.sleep(50);
-            SenderPacket sp = packetsQueue.poll();
-            DatagramPacket message = new DatagramPacket(sp.getData(), sp.getData().length, InetAddress.getByName(ip), port);
-            datagramSocket.send(message);
-            System.out.println("Message #" + sp.getData()[0] + " sent.");
+            while (sendingQueue.isEmpty()) Thread.sleep(200);
+            SenderPacket packetToSend = sendingQueue.poll();
+            int sequenceNumber = packetToSend.getSequenceNumber();
+            senderBitmap[sequenceNumber]++;
+            startTimes.set(sequenceNumber, System.currentTimeMillis());
 
-        }
-    }
-
-    private void receiveAck() throws IOException {
-        byte[] ack = new byte[2 + win / 8];
-        DatagramPacket dp = new DatagramPacket(ack, ack.length);
-        datagramSocket.receive(dp);
-        System.out.print("Ack received: ");
-        int leftAckIndex = (int) ack[0];
-        for (int i = 0; i < win / 8; i++) {
-            String s = String.format("%8s", Integer.toBinaryString(ack[i + 2] & 0xFF));
-            for (int j = 0; j < 8; j++) {
-                bitmap[leftAckIndex + i * 8 + j] = s.charAt(j) - 48;
-                System.out.print(bitmap[leftAckIndex + i * 8 + j]);
+            if (checkLostRate()) {
+                DatagramPacket message = new DatagramPacket(packetToSend.getData(), packetToSend.getData().length, InetAddress.getByName(ip), port);
+                datagramSocket.send(message);
             }
         }
-        System.out.println();
     }
 
-    private void senderMoveWindow() throws InterruptedException {
-        while (true) {
-            if (bitmap[leftIndex] == 1) {
-                leftIndex++;
-                System.out.println("Window move: 1\tCurrent window start index: " + leftIndex);
-            } else {
-                int ones = 0;
-                int remained = num - leftIndex > win ? win : num - leftIndex;
-                //COUNTING ONES IN CURRENT WINDOW
-                for (int i = leftIndex; i < leftIndex + remained; i++) {
-                    ones += bitmap[i];
-                }
-                //CHECKING IF THE WINDOW CAN BE MOVED
-                if (((remained - ones) / remained) * 100 < l) {
-                    leftIndex += remained;
-                    System.out.println("Window move: " + remained + "\tCurrent window start index: " + leftIndex);
-                    if (leftIndex == num - 1) {//END OF PROGRAM
+    /**
+     * @return true if we have to send otherwise false
+     */
+    private boolean checkLostRate() {
+        return (Math.random() * 100) >= this.l;
+    }
 
+    /**
+     * @throws IOException TODO add code for logging
+     */
+    private void receiveAck() throws IOException {
+        byte[] ack = new byte[2 + (win / 8)];
+        DatagramPacket ackPacket = new DatagramPacket(ack, ack.length);
+        datagramSocket.receive(ackPacket);
+
+        byte[] ackData = ackPacket.getData();
+        byte[] ackSequenceNumberBytes = new byte[2];
+        System.arraycopy(ackData, 0, ackSequenceNumberBytes, 0, 2);
+        int sequenceNumber = Packet.byteArrayToInt(ackSequenceNumberBytes);
+
+        senderBitmap[sequenceNumber] = -1;
+    }
+
+    private void senderMoveWindow() {
+        while (true) {
+            while (senderBitmap[windowLeftIndex] == -1) {
+                windowLeftIndex++;
+            }
+
+            int lastIndexOfWindow = (windowLeftIndex + this.win < num) ? (windowLeftIndex + this.win) : (num - 1);
+            for (int i = windowLeftIndex; i <= lastIndexOfWindow; i++) {
+                if (senderBitmap[i] != -1) {
+                    if (senderBitmap[i] == 0) {
+                        if (!sendingQueue.contains(senderPackets.get(i))) {
+                            sendingQueue.add(senderPackets.get(i));
+                        }
+                    } else {
+                        if (!sendingQueue.contains(senderPackets.get(i))) {
+                            // Timeout
+                            if (System.currentTimeMillis() - startTimes.get(i) > 100) {
+                                sendingQueue.add(senderPackets.get(i));
+                            }
+                            // Wait till timeout or ack
+                        }
                     }
                 }
             }
-            Thread.sleep(75);
+        }
+    }
+
+    private void initSenderPackets() {
+        senderBitmap = new int[num];
+        startTimes = new ArrayList<>(num);
+        senderPackets = new ArrayList<SenderPacket>(num);
+        for (int i = 0; i < num; i++) {
+            senderPackets.add(new SenderPacket(i));
         }
     }
 }
