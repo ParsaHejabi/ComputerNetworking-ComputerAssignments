@@ -2,7 +2,7 @@ package Sender;
 
 import Packet.Packet;
 import Packet.SenderPacket;
-import org.jetbrains.annotations.NotNull;
+//import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -133,7 +133,7 @@ class Sender {
         initSenderPackets();
     }
 
-    private void createLogFile(@NotNull String logFileAddress) throws IOException {
+    private void createLogFile(/*@NotNull*/ String logFileAddress) throws IOException {
         int lastSlashIndex = logFileAddress.lastIndexOf("/");
         String dirs = logFileAddress.substring(0, lastSlashIndex);
         if (new File(projectPath + dirs).mkdirs()) {
@@ -156,7 +156,7 @@ class Sender {
      */
     private void sendPacket() throws InterruptedException, IOException {
         while (true) {
-            while (sendingQueue.isEmpty()) Thread.sleep(200);
+            while (sendingQueue.isEmpty()) Thread.sleep(50);
             SenderPacket packetToSend = sendingQueue.poll();
             int sequenceNumber = packetToSend.getSequenceNumber();
             senderBitmap[sequenceNumber]++;
@@ -178,6 +178,7 @@ class Sender {
 
     /**
      * @throws IOException TODO add code for logging
+     * FIXME receiveAck() method must lose l% of the acks
      */
     private void receiveAck() throws IOException {
         byte[] ack = new byte[2 + (win / 8)];

@@ -1,11 +1,11 @@
 package Packet;
 
-import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NotNull;
+/*import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;*/
 
 public class Packet {
 
-    @Contract(pure = true)
+//    @Contract(pure = true)
     public static byte[] intToByteArray(int number) {
         byte[] result = new byte[2];
         result[0] = (byte) (number & 0xFF);
@@ -13,8 +13,8 @@ public class Packet {
         return result;
     }
 
-    @Contract(pure = true)
-    public static int byteArrayToInt(@NotNull byte[] data) {
+//    @Contract(pure = true)
+    public static int byteArrayToInt( byte[] data) {
         return ((data[1] & 0xFF) << 8) |
                 (data[0] & 0xFF);
     }

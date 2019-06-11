@@ -1,6 +1,6 @@
 package Receiver;
 
-import org.jetbrains.annotations.NotNull;
+//import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 
@@ -14,7 +14,7 @@ public class ReceiverRunner {
         receiver.receiverSendThread.start();
     }
 
-    private static Receiver createReceiver(@NotNull String[] args) throws IOException {
+    private static Receiver createReceiver(/*@NotNull*/ String[] args) throws IOException {
         Receiver receiver = null;
 
         int port = Integer.parseInt(args[0]);
