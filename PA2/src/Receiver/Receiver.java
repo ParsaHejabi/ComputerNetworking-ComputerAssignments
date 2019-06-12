@@ -112,7 +112,7 @@ class Receiver {
     }
 
     private void receivePacket() throws IOException {
-        datagramSocket.setSoTimeout(60000);
+        datagramSocket.setSoTimeout(1000);
         while (true) {
             byte[] receivedPacket = new byte[SENDER_PACKET_LENGTH];
             DatagramPacket dp = new DatagramPacket(receivedPacket, SENDER_PACKET_LENGTH);
@@ -143,6 +143,7 @@ class Receiver {
         }
     }
 
+    @SuppressWarnings("InfiniteLoopStatement")
     private void sendAck() throws InterruptedException, IOException {
         while (true) {
             while (receiverPacketsQueue.isEmpty()) Thread.sleep(50);
@@ -154,6 +155,7 @@ class Receiver {
         }
     }
 
+    @SuppressWarnings("InfiniteLoopStatement")
     private void receiverMoveWindow() throws InterruptedException {
         while (true) {
             while (bitmap[windowLeftIndex]) {
