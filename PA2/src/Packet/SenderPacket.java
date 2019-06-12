@@ -5,8 +5,8 @@ import java.util.Random;
 public class SenderPacket extends Packet {
     private static final int PACKET_SIZE = 512;
 
-    private int sequenceNumber;
-    private byte[] data;
+    private final int sequenceNumber;
+    private final byte[] data;
 
     public SenderPacket(int sequenceNumber) {
         this.sequenceNumber = sequenceNumber;

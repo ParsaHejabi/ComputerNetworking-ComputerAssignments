@@ -1,36 +1,22 @@
 package Receiver;
 
+import Logger.Log;
 import Packet.Packet;
 import Packet.ReceiverPacket;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketTimeoutException;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.LinkedList;
 import java.util.Queue;
 
 class Receiver {
-    private static final String projectPath = new File("./Logs").getAbsolutePath();
-
     private int port;
     private int num;
     private int win;
     private int l;
     private int windowLeftIndex;
-
-    /**
-     * TODO when writing logs check if @param logFileAddress is null write to System.out
-     */
-    private String logFileAddress;
-    private FileWriter logFileWriter;
-
-    private DateFormat dateFormat;
 
     Thread receiverSendThread;
     Thread receiverReceiveThread;
@@ -40,11 +26,10 @@ class Receiver {
     private ReceiverPacket[] receiverPacketArray;
 
     private DatagramSocket datagramSocket;
-    private static int senderPacketLength = 512;
+    private static final int SENDER_PACKET_LENGTH = 512;
     private boolean[] bitmap;
 
-    private Receiver(){
-        dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+    private Receiver() {
         receiverPacketsQueue = new LinkedList<>();
 
         receiverSendThread = new Thread(() -> {
@@ -109,9 +94,7 @@ class Receiver {
         datagramSocket = new DatagramSocket(port);
         receiverPacketArray = new ReceiverPacket[num];
 
-        this.logFileAddress = logFileAddress;
-
-        createLogFile(logFileAddress);
+        Log.createLogFile(logFileAddress);
     }
 
     Receiver(int port, int num, int win, int l, String logFileAddress) throws IOException {
@@ -125,30 +108,14 @@ class Receiver {
         datagramSocket = new DatagramSocket(port);
         receiverPacketArray = new ReceiverPacket[num];
 
-        this.logFileAddress = logFileAddress;
-
-        createLogFile(logFileAddress);
-    }
-
-    private void createLogFile(String logFileAddress) throws IOException {
-        int lastSlashIndex = logFileAddress.lastIndexOf("/");
-        String dirs = logFileAddress.substring(0, lastSlashIndex);
-        if (new File(projectPath + dirs).mkdirs()) {
-            System.out.println(dateFormat.format(new Date()) + ":\tCreated log file directory.");
-
-            this.logFileWriter = new FileWriter(projectPath + logFileAddress);
-        } else {
-            DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-            System.out.println(dateFormat.format(new Date()) + ":\tFailed to create log file directory. exiting application.");
-            System.exit(2);
-        }
+        Log.createLogFile(logFileAddress);
     }
 
     private void receivePacket() throws IOException {
         datagramSocket.setSoTimeout(60000);
         while (true) {
-            byte[] receivedPacket = new byte[senderPacketLength];
-            DatagramPacket dp = new DatagramPacket(receivedPacket, senderPacketLength);
+            byte[] receivedPacket = new byte[SENDER_PACKET_LENGTH];
+            DatagramPacket dp = new DatagramPacket(receivedPacket, SENDER_PACKET_LENGTH);
             try {
                 datagramSocket.receive(dp);
             } catch (SocketTimeoutException ste) {

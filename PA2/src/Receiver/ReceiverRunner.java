@@ -2,11 +2,10 @@ package Receiver;
 
 import java.io.IOException;
 
-public class ReceiverRunner {
-    private static Receiver receiver;
+class ReceiverRunner {
 
     public static void main(String[] args) throws IOException {
-        receiver = createReceiver(args);
+        Receiver receiver = createReceiver(args);
         receiver.receiverReceiveThread.start();
         receiver.receiverMoveWindowThread.start();
         receiver.receiverSendThread.start();

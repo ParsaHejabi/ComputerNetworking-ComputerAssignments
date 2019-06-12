@@ -1,7 +1,7 @@
 package Packet;
 
 public class ReceiverPacket extends Packet {
-    private byte[] data;
+    private final byte[] data;
 
     public ReceiverPacket(int win, int sequenceNumber, byte[] bitSequence) {
         this.data = new byte[2 + (win / 8)];
