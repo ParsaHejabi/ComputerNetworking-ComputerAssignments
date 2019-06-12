@@ -22,7 +22,7 @@ class Receiver {
     private int num;
     private int win;
     private int l;
-    private int leftIndex;
+    private int windowLeftIndex;
 
     /**
      * TODO when writing logs check if @param logFileAddress is null write to System.out
@@ -36,13 +36,14 @@ class Receiver {
     Thread receiverReceiveThread;
     Thread receiverMoveWindowThread;
 
-    private Queue<Integer> receiverPacketsQueue;
+    private Queue<ReceiverPacket> receiverPacketsQueue;
+    private ReceiverPacket[] receiverPacketArray;
 
     private DatagramSocket datagramSocket;
     private static int senderPacketLength = 512;
     private boolean[] bitmap;
 
-    Receiver() throws IOException {
+    private Receiver(){
         dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
         receiverPacketsQueue = new LinkedList<>();
 
@@ -78,10 +79,11 @@ class Receiver {
         this.num = num;
         this.win = 128;
         this.l = l;
-        leftIndex = 0;
+        windowLeftIndex = 0;
 
         bitmap = new boolean[num];
         datagramSocket = new DatagramSocket(port);
+        receiverPacketArray = new ReceiverPacket[num];
     }
 
     Receiver(int port, int num, int win, int l) throws IOException {
@@ -89,10 +91,11 @@ class Receiver {
         this.num = num;
         this.win = win;
         this.l = l;
-        leftIndex = 0;
+        windowLeftIndex = 0;
 
         bitmap = new boolean[num];
         datagramSocket = new DatagramSocket(port);
+        receiverPacketArray = new ReceiverPacket[num];
     }
 
     Receiver(int port, int num, int l, String logFileAddress) throws IOException {
@@ -100,10 +103,11 @@ class Receiver {
         this.num = num;
         this.win = 128;
         this.l = l;
-        leftIndex = 0;
+        windowLeftIndex = 0;
 
         bitmap = new boolean[num];
         datagramSocket = new DatagramSocket(port);
+        receiverPacketArray = new ReceiverPacket[num];
 
         this.logFileAddress = logFileAddress;
 
@@ -115,10 +119,11 @@ class Receiver {
         this.num = num;
         this.win = win;
         this.l = l;
-        leftIndex = 0;
+        windowLeftIndex = 0;
 
         bitmap = new boolean[num];
         datagramSocket = new DatagramSocket(port);
+        receiverPacketArray = new ReceiverPacket[num];
 
         this.logFileAddress = logFileAddress;
 
@@ -151,31 +156,41 @@ class Receiver {
             }
             receivedPacket = dp.getData();
             System.out.println("Message #" + receivedPacket[0] + " received.");
-            bitmap[receivedPacket[0]] = true;
-            byte[] sequenceNumber = {receivedPacket[0], receivedPacket[1]};
-            if (receiverPacketsQueue.contains(sequenceNumber))
-                receiverPacketsQueue.add(Packet.byteArrayToInt(sequenceNumber));
+
+            byte[] sequenceNumberBytes = {receivedPacket[0], receivedPacket[1]};
+            int sequenceNumber = Packet.byteArrayToInt(sequenceNumberBytes);
+
+            if (!bitmap[sequenceNumber]) { // This is the first time we're receiving this packet
+                bitmap[sequenceNumber] = true;
+                boolean[] booleanMap = new boolean[win];
+                System.arraycopy(bitmap, windowLeftIndex, booleanMap, 0, win);
+                byte[] ackBitmap = makeAckBitmap(booleanMap);
+                ReceiverPacket receiverPacket = new ReceiverPacket(win, sequenceNumber, ackBitmap);
+                receiverPacketArray[sequenceNumber] = receiverPacket;
+            } else { // We have already received this packet, its ack is either in the queue or it has been sent
+                ReceiverPacket receiverPacket = receiverPacketArray[sequenceNumber];
+                if (!receiverPacketsQueue.contains(receiverPacket)) {
+                    receiverPacketsQueue.add(receiverPacket);
+                }
+            }
         }
     }
 
     private void sendAck() throws InterruptedException, IOException {
         while (true) {
             while (receiverPacketsQueue.isEmpty()) Thread.sleep(50);
-            int sequenceNumber = receiverPacketsQueue.poll();
-            boolean[] booleanMap = new boolean[win];
-            System.arraycopy(bitmap, leftIndex, booleanMap, 0, win);
-            byte[] ackBitmap = makeAckBitmap(booleanMap);
-            ReceiverPacket receiverPacket = new ReceiverPacket(win, sequenceNumber, ackBitmap);
-            DatagramPacket ack = new DatagramPacket(receiverPacket.getData(), receiverPacket.getData().length, port);
-            datagramSocket.send(ack);
-            System.out.println("Ack #" + sequenceNumber + " sent.");
+            ReceiverPacket receiverPacket = receiverPacketsQueue.poll();
+            if (checkLostRate()) {
+                DatagramPacket ack = new DatagramPacket(receiverPacket.getData(), receiverPacket.getData().length, port);
+                datagramSocket.send(ack);
+            }
         }
     }
 
     private void receiverMoveWindow() throws InterruptedException {
         while (true) {
-            while (bitmap[leftIndex]) {
-                leftIndex++;
+            while (bitmap[windowLeftIndex]) {
+                windowLeftIndex++;
             }
             Thread.sleep(50);
         }
@@ -187,5 +202,9 @@ class Receiver {
             intMap = (intMap << 1) + ((booleanMap[i] ? 1 : 0) & 0x01);
         }
         return Packet.intToByteArray(intMap);
+    }
+
+    private boolean checkLostRate() {
+        return (Math.random() * 100) >= this.l;
     }
 }

@@ -3,14 +3,14 @@ package Sender;
 import java.io.IOException;
 
 class SenderRunner {
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         Sender sender = createSender(args);
         sender.senderSendThread.start();
         sender.senderReceiveThread.start();
         sender.senderMoveWindowThread.start();
     }
 
-    private static Sender createSender(String[] args) throws IOException {
+    private static Sender createSender(String[] args) throws IOException, InterruptedException {
         Sender sender = null;
 
         String ip = args[0];

@@ -177,7 +177,6 @@ class Sender {
 
     /**
      * @throws IOException TODO add code for logging
-     *                     FIXME receiveAck() method must lose l% of the acks
      */
     private void receiveAck() throws IOException {
         byte[] ack = new byte[2 + (win / 8)];
