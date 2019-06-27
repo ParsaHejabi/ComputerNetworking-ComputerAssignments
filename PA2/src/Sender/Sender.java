@@ -157,7 +157,8 @@ class Sender {
         System.arraycopy(ackData, 0, ackSequenceNumberBytes, 0, 2);
         int sequenceNumber = Packet.byteArrayToInt(ackSequenceNumberBytes);
 
-        senderBitmap[sequenceNumber] = -1;
+        if (senderBitmap[sequenceNumber] != -1)
+            senderBitmap[sequenceNumber] = -1;
     }
 
     private void senderMoveWindow() {
@@ -177,6 +178,10 @@ class Sender {
                         if (!sendingQueue.contains(senderPackets.get(i))) {
                             // Timeout
                             if (System.currentTimeMillis() - startTimes.get(i) > 100) {
+                                if (senderBitmap[i] == 8) {
+                                    //TODO make RECEIVER TIMEOUT record, close log file and exit.
+                                    System.exit(3);
+                                }
                                 sendingQueue.add(senderPackets.get(i));
                             }
                             // Wait till timeout or ack

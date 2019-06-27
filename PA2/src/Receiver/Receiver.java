@@ -48,13 +48,7 @@ class Receiver {
             }
         });
 
-        receiverMoveWindowThread = new Thread(() -> {
-            try {
-                receiverMoveWindow();
-            } catch (InterruptedException ie) {
-                ie.printStackTrace();
-            }
-        });
+        receiverMoveWindowThread = new Thread(this::receiverMoveWindow);
     }
 
     Receiver(int port, int num, int l) throws IOException {
@@ -119,21 +113,22 @@ class Receiver {
             try {
                 datagramSocket.receive(dp);
             } catch (SocketTimeoutException ste) {
+                // TODO log SENDER TIMEOUT and close the log
                 System.exit(3);
             }
             receivedPacket = dp.getData();
-            System.out.println("Message #" + receivedPacket[0] + " received.");
-
             byte[] sequenceNumberBytes = {receivedPacket[0], receivedPacket[1]};
             int sequenceNumber = Packet.byteArrayToInt(sequenceNumberBytes);
 
             if (!bitmap[sequenceNumber]) { // This is the first time we're receiving this packet
                 bitmap[sequenceNumber] = true;
                 boolean[] booleanMap = new boolean[win];
+                // TODO check if the window size is less than win
                 System.arraycopy(bitmap, windowLeftIndex, booleanMap, 0, win);
                 byte[] ackBitmap = makeAckBitmap(booleanMap);
                 ReceiverPacket receiverPacket = new ReceiverPacket(win, sequenceNumber, ackBitmap);
                 receiverPacketArray[sequenceNumber] = receiverPacket;
+                receiverPacketsQueue.add(receiverPacket);
             } else { // We have already received this packet, its ack is either in the queue or it has been sent
                 ReceiverPacket receiverPacket = receiverPacketArray[sequenceNumber];
                 if (!receiverPacketsQueue.contains(receiverPacket)) {
@@ -155,13 +150,11 @@ class Receiver {
         }
     }
 
-    @SuppressWarnings("InfiniteLoopStatement")
-    private void receiverMoveWindow() throws InterruptedException {
+    private void receiverMoveWindow() {
         while (true) {
             while (bitmap[windowLeftIndex]) {
                 windowLeftIndex++;
             }
-            Thread.sleep(50);
         }
     }
 
