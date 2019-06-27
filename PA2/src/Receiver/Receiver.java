@@ -122,10 +122,7 @@ class Receiver {
 
             if (!bitmap[sequenceNumber]) { // This is the first time we're receiving this packet
                 bitmap[sequenceNumber] = true;
-                boolean[] booleanMap = new boolean[win];
-                // TODO check if the window size is less than win
-                System.arraycopy(bitmap, windowLeftIndex, booleanMap, 0, win);
-                byte[] ackBitmap = makeAckBitmap(booleanMap);
+                byte[] ackBitmap = makeAckBitmap();
                 ReceiverPacket receiverPacket = new ReceiverPacket(win, sequenceNumber, ackBitmap);
                 receiverPacketArray[sequenceNumber] = receiverPacket;
                 receiverPacketsQueue.add(receiverPacket);
@@ -158,12 +155,25 @@ class Receiver {
         }
     }
 
-    private byte[] makeAckBitmap(boolean[] booleanMap) {
-        int intMap = 0;
-        for (int i = 0; i < win; i++) {
-            intMap = (intMap << 1) + ((booleanMap[i] ? 1 : 0) & 0x01);
+    private byte[] makeAckBitmap() {
+        int length = windowLeftIndex + win < num ? win : num - windowLeftIndex;
+
+        boolean[] ackBitMap = new boolean[win];
+        System.arraycopy(bitmap,windowLeftIndex,ackBitMap,0,length);
+
+        return toBytes(ackBitMap);
+    }
+
+    private byte[] toBytes(boolean[] input) {
+        byte[] toReturn = new byte[input.length / 8];
+        for (int entry = 0; entry < toReturn.length; entry++) {
+            for (int bit = 0; bit < 8; bit++) {
+                if (input[entry * 8 + bit]) {
+                    toReturn[entry] |= (128 >> bit);
+                }
+            }
         }
-        return Packet.intToByteArray(intMap);
+        return toReturn;
     }
 
     private boolean checkLostRate() {
