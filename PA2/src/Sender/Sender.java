@@ -33,6 +33,8 @@ class Sender {
 
     private DatagramSocket datagramSocket;
 
+    private boolean initIsDone = false;
+
     private Sender() throws IOException {
         sendingQueue = new LinkedList<>();
         datagramSocket = new DatagramSocket();
@@ -121,9 +123,8 @@ class Sender {
      *                              cleared when this exception is thrown.
      * @throws IOException          if an I/O error occurs.
      */
-    @SuppressWarnings("InfiniteLoopStatement")
     private void sendPacket() throws InterruptedException, IOException {
-        while (true) {
+        while (initIsDone) {
             while (sendingQueue.isEmpty()) Thread.sleep(50);
             SenderPacket packetToSend = sendingQueue.poll();
             int sequenceNumber = packetToSend.getSequenceNumber();
@@ -148,22 +149,25 @@ class Sender {
      * @throws IOException TODO add code for logging
      */
     private void receiveAck() throws IOException {
-        byte[] ack = new byte[2 + (win / 8)];
-        DatagramPacket ackPacket = new DatagramPacket(ack, ack.length);
-        datagramSocket.receive(ackPacket);
+        while (initIsDone) {
+            byte[] ack = new byte[2 + (win / 8)];
+            DatagramPacket ackPacket = new DatagramPacket(ack, ack.length);
+            datagramSocket.receive(ackPacket);
 
-        byte[] ackData = ackPacket.getData();
-        byte[] ackSequenceNumberBytes = new byte[2];
-        System.arraycopy(ackData, 0, ackSequenceNumberBytes, 0, 2);
-        int sequenceNumber = Packet.byteArrayToInt(ackSequenceNumberBytes);
+            byte[] ackData = ackPacket.getData();
+            byte[] ackSequenceNumberBytes = new byte[2];
+            System.arraycopy(ackData, 0, ackSequenceNumberBytes, 0, 2);
+            int sequenceNumber = Packet.byteArrayToInt(ackSequenceNumberBytes);
 
-        if (senderBitmap[sequenceNumber] != -1)
-            senderBitmap[sequenceNumber] = -1;
+            if (senderBitmap[sequenceNumber] != -1)
+                senderBitmap[sequenceNumber] = -1;
+        }
     }
 
     private void senderMoveWindow() {
-        while (true) {
+        while (initIsDone) {
             while (senderBitmap[windowLeftIndex] == -1) {
+                //TODO Log
                 windowLeftIndex++;
             }
 
@@ -197,7 +201,9 @@ class Sender {
         startTimes = new ArrayList<>(num);
         senderPackets = new ArrayList<SenderPacket>(num);
         for (int i = 0; i < num; i++) {
+            startTimes.add(0L);
             senderPackets.add(new SenderPacket(i));
         }
+        initIsDone = true;
     }
 }

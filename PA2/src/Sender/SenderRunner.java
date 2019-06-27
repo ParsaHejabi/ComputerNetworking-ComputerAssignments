@@ -1,5 +1,7 @@
 package Sender;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.IOException;
 
 class SenderRunner {
@@ -10,7 +12,7 @@ class SenderRunner {
         sender.senderMoveWindowThread.start();
     }
 
-    private static Sender createSender(String[] args) throws IOException {
+    private static Sender createSender(@NotNull String[] args) throws IOException {
         Sender sender = null;
 
         String ip = args[0];

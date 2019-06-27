@@ -3,6 +3,8 @@ package Receiver;
 import Logger.Log;
 import Packet.Packet;
 import Packet.ReceiverPacket;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -164,7 +166,8 @@ class Receiver {
         return toBytes(ackBitMap);
     }
 
-    private byte[] toBytes(boolean[] input) {
+    @Contract(pure = true)
+    private byte[] toBytes(@NotNull boolean[] input) {
         byte[] toReturn = new byte[input.length / 8];
         for (int entry = 0; entry < toReturn.length; entry++) {
             for (int bit = 0; bit < 8; bit++) {

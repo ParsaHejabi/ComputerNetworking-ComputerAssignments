@@ -1,5 +1,7 @@
 package Logger;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -19,7 +21,7 @@ public class Log {
     /**
      * TODO when writing logs check if @param logFileAddress is null write to System.out
      */
-    public static void createLogFile(String logFileAddress) throws IOException {
+    public static void createLogFile(@NotNull String logFileAddress) throws IOException {
         int lastSlashIndex = logFileAddress.lastIndexOf("/");
         String dirs = logFileAddress.substring(0, lastSlashIndex);
         if (new File(projectPath + dirs).mkdirs()) {
