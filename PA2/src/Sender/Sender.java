@@ -37,7 +37,7 @@ class Sender {
 
     private Sender() throws IOException {
         sendingQueue = new LinkedList<>();
-        datagramSocket = new DatagramSocket();
+        datagramSocket = new DatagramSocket(120);
         windowLeftIndex = 0;
 
         senderSendThread = new Thread(() -> {
@@ -140,6 +140,7 @@ class Sender {
             if (checkLostRate()) {
                 DatagramPacket message = new DatagramPacket(packetToSend.getData(), packetToSend.getData().length, InetAddress.getByName(ip), port);
                 datagramSocket.send(message);
+                Log.senderSendPacketsLog(System.currentTimeMillis(), sequenceNumber, senderBitmap[sequenceNumber] - 1 == 0 ? "TX" : "RTX");
             }
         }
     }
@@ -159,12 +160,11 @@ class Sender {
             byte[] ack = new byte[2 + (win / 8)];
             DatagramPacket ackPacket = new DatagramPacket(ack, ack.length);
             datagramSocket.receive(ackPacket);
-
             byte[] ackData = ackPacket.getData();
             byte[] ackSequenceNumberBytes = new byte[2];
             System.arraycopy(ackData, 0, ackSequenceNumberBytes, 0, 2);
             int sequenceNumber = Packet.byteArrayToInt(ackSequenceNumberBytes);
-
+            System.out.println("Ack #" + sequenceNumber + " received.");
             if (senderBitmap[sequenceNumber] != -1)
                 senderBitmap[sequenceNumber] = -1;
         }
@@ -175,6 +175,11 @@ class Sender {
             while (senderBitmap[windowLeftIndex] == -1) {
                 //TODO Log
                 windowLeftIndex++;
+                System.out.println("Window moved: " + windowLeftIndex);
+                if (windowLeftIndex == num){
+                    System.out.println("All Packets successfully sent.\nAll Acks successfully received.");
+                    System.exit(3);
+                }
             }
 
             int lastIndexOfWindow = (windowLeftIndex + this.win < num) ? (windowLeftIndex + this.win) : (num - 1);
