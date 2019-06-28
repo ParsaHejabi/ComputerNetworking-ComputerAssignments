@@ -56,7 +56,13 @@ class Sender {
             }
         });
 
-        senderMoveWindowThread = new Thread(this::senderMoveWindow);
+        senderMoveWindowThread = new Thread(() -> {
+            try {
+                senderMoveWindow();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     Sender(String ip, int port, int num, int l) throws IOException {
@@ -164,7 +170,7 @@ class Sender {
         }
     }
 
-    private void senderMoveWindow() {
+    private void senderMoveWindow() throws IOException {
         while (initIsDone) {
             while (senderBitmap[windowLeftIndex] == -1) {
                 //TODO Log
@@ -183,7 +189,8 @@ class Sender {
                             // Timeout
                             if (System.currentTimeMillis() - startTimes.get(i) > 100) {
                                 if (senderBitmap[i] == 8) {
-                                    //TODO make RECEIVER TIMEOUT record, close log file and exit.
+                                    // TODO check if exit is exiting from the whole app not just this thread
+                                    Log.receiverTimeoutLog(System.currentTimeMillis());
                                     System.exit(3);
                                 }
                                 sendingQueue.add(senderPackets.get(i));

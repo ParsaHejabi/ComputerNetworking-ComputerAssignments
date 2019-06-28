@@ -115,7 +115,8 @@ class Receiver {
             try {
                 datagramSocket.receive(dp);
             } catch (SocketTimeoutException ste) {
-                // TODO log SENDER TIMEOUT and close the log
+                // TODO check if exit is exiting from the whole app not just this thread
+                Log.senderTimeoutLog(System.currentTimeMillis());
                 System.exit(3);
             }
             receivedPacket = dp.getData();
@@ -161,7 +162,7 @@ class Receiver {
         int length = windowLeftIndex + win < num ? win : num - windowLeftIndex;
 
         boolean[] ackBitMap = new boolean[win];
-        System.arraycopy(bitmap,windowLeftIndex,ackBitMap,0,length);
+        System.arraycopy(bitmap, windowLeftIndex, ackBitMap, 0, length);
 
         return toBytes(ackBitMap);
     }
