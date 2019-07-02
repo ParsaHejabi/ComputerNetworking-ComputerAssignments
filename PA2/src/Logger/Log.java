@@ -58,7 +58,7 @@ public class Log {
                 bitmapToShow[i] = '1';
             }
         }
-        String logMessage = dateFormat.format(new Date(time)) + ", "
+        String logMessage = (double)(time / 1000) + "s, "
                 + oldStart + ", "
                 + newStart + ", "
                 + Arrays.toString(bitmapToShow) + ", "

@@ -145,7 +145,7 @@ class Receiver {
     @SuppressWarnings("InfiniteLoopStatement")
     private void sendAck() throws InterruptedException, IOException {
         while (initIsDone) {
-            while (receiverPacketsQueue.isEmpty()) Thread.sleep(25);
+            while (receiverPacketsQueue.isEmpty()) Thread.sleep(5);
             ReceiverPacket receiverPacket = receiverPacketsQueue.poll();
             if (checkLostRate()) {
                 DatagramPacket ack = new DatagramPacket(receiverPacket.getData(), receiverPacket.getData().length, InetAddress.getLocalHost(), 120);
@@ -160,7 +160,7 @@ class Receiver {
 
     private void receiverMoveWindow() throws InterruptedException {
         while (initIsDone) {
-            Thread.sleep(10);
+            Thread.sleep(5);
             while (bitmap[windowLeftIndex]) {
                 windowLeftIndex++;
                 if (windowLeftIndex == num) return;

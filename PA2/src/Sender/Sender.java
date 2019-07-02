@@ -131,7 +131,7 @@ class Sender {
      */
     private void sendPacket() throws InterruptedException, IOException {
         while (initIsDone) {
-            while (sendingQueue.isEmpty()) Thread.sleep(50);
+            while (sendingQueue.isEmpty()) Thread.sleep(5);
             SenderPacket packetToSend = sendingQueue.poll();
             int sequenceNumber = packetToSend.getSequenceNumber();
             senderBitmap[sequenceNumber]++;
