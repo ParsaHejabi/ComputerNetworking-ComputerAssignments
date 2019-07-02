@@ -5,9 +5,8 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 
 class SenderRunner {
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws IOException {
         Sender sender = createSender(args);
-        Thread.sleep(3000);
         sender.senderSendThread.start();
         sender.senderReceiveThread.start();
         sender.senderMoveWindowThread.start();

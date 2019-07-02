@@ -13,7 +13,7 @@ import java.util.Date;
 public class Log {
     private static final String projectPath = new File("./Logs").getAbsolutePath();
 
-    private static DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+    private static final DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 
     private static FileWriter logFileWriter;
     private static boolean hasLogFile;
@@ -72,7 +72,7 @@ public class Log {
     }
 
     public static void receiverSendAckLog(long time, int start, int end, boolean[] bitmap) throws IOException {
-        String logMessage = dateFormat.format(new Date(time)) + ", " + start + ":" + end + Arrays.toString(bitmap);
+        String logMessage = dateFormat.format(new Date(time)) + ", " + start + ":" + end + ", " + Arrays.toString(changeBooleanToInt(bitmap));
         if (hasLogFile) {
             logFileWriter.write(logMessage);
             logFileWriter.flush();
@@ -111,5 +111,13 @@ public class Log {
         } else {
             System.out.println(logMessage);
         }
+    }
+
+    private static int[] changeBooleanToInt(boolean[] booleans) {
+        int[] returnInts = new int[booleans.length];
+        for (int i = 0; i < booleans.length; i++) {
+            returnInts[i] = booleans[i] ? 1 : 0;
+        }
+        return returnInts;
     }
 }
