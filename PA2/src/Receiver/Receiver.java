@@ -3,7 +3,6 @@ package Receiver;
 import Logger.Log;
 import Packet.Packet;
 import Packet.ReceiverPacket;
-import Sender.Sender;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
@@ -12,19 +11,19 @@ import java.net.*;
 import java.util.LinkedList;
 import java.util.Queue;
 
-public class Receiver {
-    public static int port;
+class Receiver {
+    private int port;
     private int num;
     private int win;
     private int l;
     private int windowLeftIndex;
     private boolean initIsDone;
 
-    final Thread receiverSendThread;
-    final Thread receiverReceiveThread;
-    final Thread receiverMoveWindowThread;
+    Thread receiverSendThread;
+    Thread receiverReceiveThread;
+    Thread receiverMoveWindowThread;
 
-    private final Queue<ReceiverPacket> receiverPacketsQueue;
+    private Queue<ReceiverPacket> receiverPacketsQueue;
     private ReceiverPacket[] receiverPacketArray;
 
     private DatagramSocket datagramSocket;
@@ -51,13 +50,19 @@ public class Receiver {
             }
         });
 
-        receiverMoveWindowThread = new Thread(this::receiverMoveWindow);
+        receiverMoveWindowThread = new Thread(() -> {
+            try {
+                receiverMoveWindow();
+            } catch (InterruptedException ioe) {
+                ioe.printStackTrace();
+            }
+        });
     }
 
     Receiver(int port, int num, int l) throws IOException {
         this();
 
-        Receiver.port = port;
+        this.port = port;
         this.num = num;
         this.win = 128;
         this.l = l;
@@ -69,7 +74,7 @@ public class Receiver {
     Receiver(int port, int num, int win, int l) throws IOException {
         this();
 
-        Receiver.port = port;
+        this.port = port;
         this.num = num;
         this.win = win;
         this.l = l;
@@ -81,7 +86,7 @@ public class Receiver {
     Receiver(int port, int num, int l, String logFileAddress) throws IOException {
         this();
 
-        Receiver.port = port;
+        this.port = port;
         this.num = num;
         this.win = 128;
         this.l = l;
@@ -93,7 +98,7 @@ public class Receiver {
     Receiver(int port, int num, int win, int l, String logFileAddress) throws IOException {
         this();
 
-        Receiver.port = port;
+        this.port = port;
         this.num = num;
         this.win = win;
         this.l = l;
@@ -110,6 +115,10 @@ public class Receiver {
                 datagramSocket.receive(dp);
             } catch (SocketTimeoutException ste) {
                 // TODO check if exit is exiting from the whole app not just this thread
+                if (windowLeftIndex == num) {
+                    System.out.println("All packets are received.");
+                    System.exit(3);
+                }
                 Log.senderTimeoutLog(System.currentTimeMillis());
                 System.exit(3);
             }
@@ -133,12 +142,13 @@ public class Receiver {
         }
     }
 
+    @SuppressWarnings("InfiniteLoopStatement")
     private void sendAck() throws InterruptedException, IOException {
         while (initIsDone) {
             while (receiverPacketsQueue.isEmpty()) Thread.sleep(25);
             ReceiverPacket receiverPacket = receiverPacketsQueue.poll();
             if (checkLostRate()) {
-                DatagramPacket ack = new DatagramPacket(receiverPacket.getData(), receiverPacket.getData().length, InetAddress.getLocalHost(), port);
+                DatagramPacket ack = new DatagramPacket(receiverPacket.getData(), receiverPacket.getData().length, InetAddress.getLocalHost(), 120);
                 datagramSocket.send(ack);
                 int length = windowLeftIndex + win < num ? win : num - windowLeftIndex;
                 boolean[] ackBitmap = new boolean[win];
@@ -148,10 +158,12 @@ public class Receiver {
         }
     }
 
-    private void receiverMoveWindow() {
+    private void receiverMoveWindow() throws InterruptedException {
         while (initIsDone) {
+            Thread.sleep(10);
             while (bitmap[windowLeftIndex]) {
                 windowLeftIndex++;
+                if (windowLeftIndex == num) return;
             }
         }
     }
@@ -184,7 +196,7 @@ public class Receiver {
 
     private void initReceiver() throws SocketException {
         bitmap = new boolean[num];
-        datagramSocket = new DatagramSocket(Sender.port);
+        datagramSocket = new DatagramSocket(port);
         datagramSocket.setSoTimeout(1000);
         receiverPacketArray = new ReceiverPacket[num];
         initIsDone = true;

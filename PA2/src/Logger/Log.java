@@ -72,7 +72,9 @@ public class Log {
     }
 
     public static void receiverSendAckLog(long time, int start, int end, boolean[] bitmap) throws IOException {
-        String logMessage = dateFormat.format(new Date(time)) + ", " + start + ":" + end + ", " + Arrays.toString(changeBooleanToInt(bitmap));
+        String logMessage = dateFormat.format(new Date(time)) + ", " + start + ":" + end + " ";
+        for (int i = 0; i < end - start; i++)
+            logMessage += bitmap[i] ? 1 : 0;
         if (hasLogFile) {
             logFileWriter.write(logMessage);
             logFileWriter.flush();
@@ -111,13 +113,5 @@ public class Log {
         } else {
             System.out.println(logMessage);
         }
-    }
-
-    private static int[] changeBooleanToInt(boolean[] booleans) {
-        int[] returnInts = new int[booleans.length];
-        for (int i = 0; i < booleans.length; i++) {
-            returnInts[i] = booleans[i] ? 1 : 0;
-        }
-        return returnInts;
     }
 }

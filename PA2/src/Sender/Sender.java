@@ -3,27 +3,25 @@ package Sender;
 import Logger.Log;
 import Packet.Packet;
 import Packet.SenderPacket;
-import Receiver.Receiver;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Queue;
 
-public class Sender {
+class Sender {
     private String ip;
-    public static int port;
+    private int port;
     private int num;
     private int win;
     private int l;
 
-    final Thread senderSendThread;
-    final Thread senderReceiveThread;
-    final Thread senderMoveWindowThread;
+    Thread senderSendThread;
+    Thread senderReceiveThread;
+    Thread senderMoveWindowThread;
 
     private ArrayList<SenderPacket> senderPackets;
     private final Queue<SenderPacket> sendingQueue;
@@ -37,8 +35,9 @@ public class Sender {
 
     private boolean initIsDone = false;
 
-    private Sender() {
+    private Sender() throws IOException {
         sendingQueue = new LinkedList<>();
+        datagramSocket = new DatagramSocket(120);
         windowLeftIndex = 0;
 
         senderSendThread = new Thread(() -> {
@@ -70,7 +69,7 @@ public class Sender {
         this();
 
         this.ip = ip;
-        Sender.port = port;
+        this.port = port;
         this.num = num;
         this.win = 128;
         this.l = l;
@@ -82,7 +81,7 @@ public class Sender {
         this();
 
         this.ip = ip;
-        Sender.port = port;
+        this.port = port;
         this.num = num;
         this.win = win;
         this.l = l;
@@ -96,7 +95,7 @@ public class Sender {
         this();
 
         this.ip = ip;
-        Sender.port = port;
+        this.port = port;
         this.num = num;
         this.win = 128;
         this.l = l;
@@ -112,7 +111,7 @@ public class Sender {
         this();
 
         this.ip = ip;
-        Sender.port = port;
+        this.port = port;
         this.num = num;
         this.win = win;
         this.l = l;
@@ -141,7 +140,7 @@ public class Sender {
             if (checkLostRate()) {
                 DatagramPacket message = new DatagramPacket(packetToSend.getData(), packetToSend.getData().length, InetAddress.getByName(ip), port);
                 datagramSocket.send(message);
-                Log.senderSendPacketsLog(System.currentTimeMillis(), sequenceNumber, senderBitmap[sequenceNumber] == 1 ? "TX" : "RTX");
+                Log.senderSendPacketsLog(System.currentTimeMillis(), sequenceNumber, senderBitmap[sequenceNumber] - 1 == 0 ? "TX" : "RTX");
             }
         }
     }
@@ -154,7 +153,7 @@ public class Sender {
     }
 
     /**
-     * @throws IOException receive ack throws exception
+     * @throws IOException TODO add code for logging
      */
     private void receiveAck() throws IOException {
         while (initIsDone) {
@@ -178,13 +177,18 @@ public class Sender {
                 long time = System.currentTimeMillis() - startTimes.get(windowLeftIndex);
                 int oldStart = windowLeftIndex;
                 windowLeftIndex++;
+                if (windowLeftIndex == num) {
+                    System.out.println("All Packets successfully sent.\nAll Acks successfully received.");
+                    System.exit(3);
+                }
                 int newStart = windowLeftIndex;
                 int lastIndexOfWindow = (windowLeftIndex + this.win < num) ? (windowLeftIndex + this.win) : (num - 1);
                 int[] logBitmap = new int[lastIndexOfWindow - windowLeftIndex + 1];
                 for (int i = windowLeftIndex; i <= lastIndexOfWindow; i++) {
-                    logBitmap[i] = (senderBitmap[i] == -1) ? 1 : 0;
+                    logBitmap[i - windowLeftIndex] = (senderBitmap[i] == -1) ? 1 : 0;
                 }
                 Log.senderShiftWindowLog(time, oldStart, newStart, logBitmap, losses);
+
             }
 
             losses = 0;
@@ -216,11 +220,10 @@ public class Sender {
         }
     }
 
-    private void initSenderPackets() throws SocketException {
+    private void initSenderPackets() {
         senderBitmap = new int[num];
         startTimes = new ArrayList<>(num);
         senderPackets = new ArrayList<SenderPacket>(num);
-        datagramSocket = new DatagramSocket(Receiver.port);
         for (int i = 0; i < num; i++) {
             startTimes.add(0L);
             senderPackets.add(new SenderPacket(i));
