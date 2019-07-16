@@ -1,0 +1,19 @@
+#!/bin/bash -e
+
+if [ $# != 0 ]; then
+  WHAT="$*"
+else
+  WHAT=*.java
+fi
+
+for i in $WHAT; do
+  J=$i
+	C=`echo $J | sed -e 's/java$/class/'`
+	if [ ! -r $C -o $J -nt $C ]; then
+  	echo "javac $J"
+	  javac $J
+	fi
+	if grep -q "void main" $J; then
+	  chmod a+x $C
+	fi
+done
